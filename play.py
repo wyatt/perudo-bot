@@ -17,7 +17,7 @@ from keras.src.saving import load_model
 # Bet count
 # Bet value
 
-loaded_model = load_model('perudo_model.h5')
+loaded_model = load_model('best_perudo_model.h5', custom_objects={'mse': 'mse'})
 
 def state_from_input(total_dice: int, previous_bets: list[int], dice: list[int]):
     state = []
@@ -110,16 +110,11 @@ while True:
     valid_actions = valid_outputs(state)
 
     # Extract Q-values for each valid action
-    valid_q_values = [q_values[np.argmax(action)] for action in valid_actions]
+    prediction = max(valid_actions, key=lambda action: q_values[0] * action[0] + q_values[1] * action[1] + q_values[2] * action[2])
 
 
     print("Valid actions: ", valid_actions)
-    print("Valid Q-values: ", valid_q_values) # prints out [0,1,1,1,0,0,1] etc.
     print("Q-values: ", q_values)
-
-    # Find the best action based on Q-values
-    best_action_index = np.argmax(valid_q_values)
-    prediction = valid_actions[best_action_index]
 
     print("Output: ", prediction)
 

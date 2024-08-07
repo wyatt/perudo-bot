@@ -1,10 +1,6 @@
 import math
 import random
 import time
-import warnings
-from urllib3.exceptions import NotOpenSSLWarning
-
-warnings.filterwarnings("ignore", category=NotOpenSSLWarning)
 
 from keras import Input
 import utils
@@ -154,14 +150,14 @@ class Player():
         if random.random() < epsilon:
             return random.choice(valid_actions)  # Random action (exploration)
         else:
-            q_values = model.predict(np.array(self.state())[np.newaxis])[0]
+            state = np.array(self.state())[np.newaxis]
+            q_values = model.predict(state)[0]
 
-            # Extract Q-values for each valid action
-            valid_q_values = [q_values[np.argmax(action)] for action in valid_actions]
+            # Find the valid action with the highest Q-value
+            best_action = max(valid_actions, key=lambda action: q_values[0] * action[0] + q_values[1] * action[1] + q_values[2] * action[2])
 
-            # Find the best action based on Q-values
-            best_action_index = np.argmax(valid_q_values)
-            return valid_actions[best_action_index]  # Best action (exploitation)
+            printd("Best action: ", best_action)
+            return best_action  # Best action (exploitation)
 
 
     def state(self):
@@ -301,9 +297,9 @@ class Game():
 
 
 # Training parameters
-POPULATION_SIZE = 20  # Reduced from 50
+POPULATION_SIZE = 25  # Reduced from 50
 NUM_GENERATIONS = 25  # Reduced from 100
-NUM_GAMES_PER_GENERATION = 25  # Reduced from 100
+NUM_GAMES_PER_GENERATION = 50  # Reduced from 100
 EPSILON_START = 0.3  # Reduced from 0.5 for faster convergence
 EPSILON_END = 0.01
 EPSILON_DECAY = (EPSILON_END / EPSILON_START) ** (1 / NUM_GENERATIONS)
@@ -410,4 +406,5 @@ def train_model():
     print(f"Best model saved as: best_perudo_model.h5")
 
 if __name__ == "__main__":
-    train_model()
+    with tf.device('/gpu:0'):
+        train_model()
