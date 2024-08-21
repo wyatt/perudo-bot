@@ -17,25 +17,51 @@ from keras.src.saving import load_model
 # Bet count
 # Bet value
 
-loaded_model = load_model('best_perudo_model.h5', custom_objects={'mse': 'mse'})
+loaded_model = load_model('perudo_model_gen_14.h5', custom_objects={'mse': 'mse'})
+
+def action_to_index(self, action):
+    # Convert action [dudo, count, value] to a single index
+    dudo, count, value = action
+    
+    if dudo:
+        return 0  # Index for dudo action
+    else:
+        min_bet = self.game.min_bet_count()
+        min_bet_ones = self.game.min_bet_count(True)
+        subtract_val = min_bet_ones if value == 1 else min_bet
+        return 1 + ((value - 1) * 5) + (count - 1 - subtract_val) 
+
+def index_to_action(self, index):
+    if index == 0:
+        return [1, 0, 0]  # Dudo action
+    else:
+        index -= 1
+        min_bet = self.game.min_bet_count()
+        min_bet_ones = self.game.min_bet_count(True)
+        add_val = min_bet_ones if index <= 5 else min_bet
+        count = (index % 5) + 1 + add_val
+        value = (index // 5) + 1
+        return [0, count, value]
 
 def state_from_input(total_dice: int, previous_bets: list[int], dice: list[int]):
     state = []
     dice_count = len(dice)
     dice = dice + [0] * (5 - len(dice))
-    is_starting = input("Are you starting? (y/n): ") == "y"
-    is_palifico = input("Is this a palifico round? (y/n): ") == "y"
+    is_starting = previous_bets[0] == 0
+    is_palifico = False
+    if len(set(previous_bets[1::2])) == 1:
+        is_palifico = input("Is this a palifico round? (y/n): ").lower() == "y"
     if is_starting:
         state += [0,0, 1 if is_palifico else 0]
     else:
-        current_bet = input("Enter current bet (count, type): ")
-        [count, type] = [int(x) for x in current_bet.split(",")]
+        count, type = previous_bets[0], previous_bets[1]
+        previous_bets = previous_bets[2:] + [0, 0]
         state += [count, type]
         state += [1 if is_palifico else 0]
 
     state += [total_dice]
     state += [dice_count]
-    state += dice
+    state += [dice.count(i) for i in range(1, 7)]
     state += [1]
     state += previous_bets
 
@@ -94,6 +120,8 @@ def valid_outputs(state):
     return valid_outputs
 
 
+
+
 total_dice = int(input("Enter total starting dice: "))
 previous_bets: list[int] = [0] * 16
 new_round = True
@@ -104,23 +132,38 @@ while True:
     if new_round:
         dice = input("Enter dice separted by a comma: ")
         dice = [int(d) for d in dice.split(",")]
+    prev = input("Enter previous bets: ")
+    if prev == "":
+        previous_bets = [0] * 16
+    else:
+        old_bets = previous_bets
+        previous_bets = [int(p) for p in prev.split(",")]
+        previous_bets = [previous_bets[i:i+2]for i in range(0, len(previous_bets), 2)][::-1]
+        previous_bets = [item for sublist in previous_bets for item in sublist]
+        previous_bets = previous_bets + old_bets[:16 - len(previous_bets)]
+    print("Previous bets: ", previous_bets)
     state = state_from_input(total_dice, previous_bets, dice)
     print(len(state), state)
     q_values = loaded_model.predict(np.array(state)[np.newaxis])[0]
     valid_actions = valid_outputs(state)
 
-    # Extract Q-values for each valid action
-    prediction = max(valid_actions, key=lambda action: q_values[0] * action[0] + q_values[1] * action[1] + q_values[2] * action[2])
+    action_mask = np.zeros(len(q_values), dtype=bool)
+    for action in valid_actions:
+        action_index = action_to_index(action)
+        action_mask[action_index] = True
 
 
-    print("Valid actions: ", valid_actions)
-    print("Q-values: ", q_values)
+    print("Q-values:", q_values)
+    # Find the valid action with the highest Q-value
+    masked_q_values = np.where(action_mask, q_values, -np.inf)
+    best_action_index = np.argmax(masked_q_values)
+    prediction = index_to_action(best_action_index)
+
 
     print("Output: ", prediction)
 
     if prediction[0] == 1:
         print("Dudo!")
-        break
     else:
         print(f"Bet: (Count: {prediction[1]}, Type: {prediction[2]})")
         previous_bets = [prediction[1], prediction[2]] + previous_bets[:14]
